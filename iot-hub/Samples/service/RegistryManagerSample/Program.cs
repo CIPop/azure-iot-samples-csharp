@@ -25,9 +25,12 @@ namespace Microsoft.Azure.Devices.Samples
 
             RegistryManager registryManager = RegistryManager.CreateFromConnectionString(s_connectionString);
 
-            var sample = new RegistryManagerSample(registryManager);
+            var sample = new RegistryManagerSample(registryManager, s_connectionString);
 
-            sample.RunSampleAsync().GetAwaiter().GetResult();
+            for (int i = 0; i < 10; i++)
+            {
+                sample.RunSampleAsync().GetAwaiter().GetResult();
+            }
 
             Console.WriteLine("Done.\n");
             return 0;

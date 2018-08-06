@@ -5,6 +5,9 @@ using Microsoft.Azure.Devices.Shared;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Azure.Devices.Client.Samples;
+using Microsoft.Azure.Devices.Client;
+using System.Text.RegularExpressions;
 
 namespace Microsoft.Azure.Devices.Samples
 {
@@ -15,48 +18,43 @@ namespace Microsoft.Azure.Devices.Samples
         // or within launchSettings.json:
         private static string s_primaryThumbprint = Environment.GetEnvironmentVariable("IOTHUB_PFX_X509_THUMBPRINT");
         private static string s_secondaryThumbprint = Environment.GetEnvironmentVariable("IOTHUB_PFX_X509_THUMBPRINT2");
+        private string _connectionString;
 
         private readonly RegistryManager _registryManager;
 
-        public RegistryManagerSample(RegistryManager registryManager)
+        public RegistryManagerSample(RegistryManager registryManager, string conectionString)
         {
             _registryManager = registryManager ?? throw new ArgumentNullException(nameof(registryManager));
+            _connectionString = conectionString;
         }
 
         public async Task RunSampleAsync()
         {
-            await EnumerateTwinsAsync().ConfigureAwait(false);
+            //await EnumerateTwinsAsync().ConfigureAwait(false);
+
+            string deviceId = DeviceId + Guid.NewGuid().ToString();
 
             try
             {
-                await AddDeviceAsync(DeviceId).ConfigureAwait(false);
-            }
-            finally
-            {
-                await RemoveDeviceAsync(DeviceId).ConfigureAwait(false);
-            }
+                Device device = await AddDeviceAsync(deviceId).ConfigureAwait(false);
 
-            try
-            {
-                await AddDeviceWithSelfSignedCertificateAsync(
-                    DeviceId, 
-                    s_primaryThumbprint, 
-                    s_secondaryThumbprint).ConfigureAwait(false);
-            }
-            finally
-            {
-                await RemoveDeviceAsync(DeviceId).ConfigureAwait(false);
-            }
+                string iotHubHostName = GetHostName(_connectionString);
+                string deviceConnectionString = $"HostName={iotHubHostName};DeviceId={device.Id};SharedAccessKey={device.Authentication.SymmetricKey.PrimaryKey}";
+                var client = DeviceClient.CreateFromConnectionString(deviceConnectionString, Client.TransportType.Amqp);
 
-            try
-            {
-                await AddDeviceWithCertificateAuthorityAuthenticationAsync(DeviceId).ConfigureAwait(false);
-                await UpdateDesiredProperties(DeviceId).ConfigureAwait(false);
+                var sendSample = new MessageSample(client);
+                await sendSample.RunSampleAsync().ConfigureAwait(false);
             }
             finally
             {
-                await RemoveDeviceAsync(DeviceId).ConfigureAwait(false);
+                await RemoveDeviceAsync(deviceId).ConfigureAwait(false);
             }
+        }
+
+        private static string GetHostName(string iotHubConnectionString)
+        {
+            Regex regex = new Regex("HostName=([^;]+)", RegexOptions.None);
+            return regex.Match(iotHubConnectionString).Groups[1].Value;
         }
 
         public async Task EnumerateTwinsAsync()
@@ -80,11 +78,10 @@ namespace Microsoft.Azure.Devices.Samples
             }
         }
 
-        public async Task AddDeviceAsync(string deviceId)
+        public async Task<Device> AddDeviceAsync(string deviceId)
         {
             Console.Write($"Adding device '{deviceId}' with default authentication . . . ");
-            await _registryManager.AddDeviceAsync(new Device(deviceId)).ConfigureAwait(false);
-            Console.WriteLine("DONE");
+            return await _registryManager.AddDeviceAsync(new Device(deviceId)).ConfigureAwait(false);
         }
 
         public async Task AddDeviceWithSelfSignedCertificateAsync(
